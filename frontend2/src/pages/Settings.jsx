@@ -98,7 +98,7 @@ export default function Settings() {
         setRestoring(true);
         const data = JSON.parse(ev.target.result);
         const res  = await axios.post('/api/backup/restore', data);
-        toast.success(`✅ Restore done! Flats: ${res.data.stats.flats}, Payments: ${res.data.stats.payments}`);
+        toast.success(`✅ Restore done! Flats: ${res.data.stats.flats}, Users: ${res.data.stats.users}, Payments: ${res.data.stats.payments}`);
         load();
       } catch (err) {
         toast.error('Restore failed: ' + (err.response?.data?.error || err.message));

@@ -20,6 +20,8 @@ router.get('/export', (req, res) => {
       settings:            db.prepare('SELECT * FROM settings').all(),
       notices:             db.prepare('SELECT * FROM notices').all(),
       documents:           db.prepare('SELECT id, title, category, filename, mimetype, filesize, uploaded_by, created_at FROM documents').all(),
+      // users included (with hashed passwords — safe to transfer)
+      users:               db.prepare('SELECT * FROM users').all(),
     };
     res.json(data);
   } catch (e) {
@@ -87,13 +89,21 @@ router.post('/restore', (req, res) => {
         (id, title, body, priority, active, expires_at, created_at)
         VALUES (@id, @title, @body, @priority, @active, @expires_at, @created_at)`);
       (data.notices || []).forEach(r => insNotice.run(r));
+
+      // Restore users — INSERT OR IGNORE so existing admin password is kept
+      // Non-admin users (flat residents) get added; existing users untouched
+      const insUser = db.prepare(`INSERT OR IGNORE INTO users
+        (id, username, password, role, flat_id, name, created_at)
+        VALUES (@id, @username, @password, @role, @flat_id, @name, @created_at)`);
+      (data.users || []).forEach(r => insUser.run(r));
     });
 
     restore();
     res.json({ message: 'Restore successful!', stats: {
-      flats: data.flats?.length || 0,
+      flats:    data.flats?.length    || 0,
       payments: data.maintenance_payments?.length || 0,
-      ledger: data.ledger_entries?.length || 0,
+      ledger:   data.ledger_entries?.length || 0,
+      users:    data.users?.length    || 0,
     }});
   } catch (e) {
     res.status(500).json({ error: e.message });
