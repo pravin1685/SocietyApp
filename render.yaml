@@ -1,0 +1,19 @@
+services:
+  # ── Backend API ──────────────────────────────────────
+  - type: web
+    name: society-app-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true        # Render auto-generates a secure random value
+      - key: FRONTEND_URL
+        value: https://society-app.vercel.app   # update after Vercel deploy
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: society-db
+      mountPath: /data
+      sizeGB: 1                    # $1/month — keeps SQLite data persistent

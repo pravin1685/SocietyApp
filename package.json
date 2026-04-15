@@ -1,0 +1,10 @@
+{
+  "name": "central-park-society-app",
+  "version": "1.0.0",
+  "description": "Central Park Housing Society Management System",
+  "scripts": {
+    "backend": "cd backend && node server.js",
+    "frontend": "cd frontend2 && npm run dev",
+    "dev": "start cmd /k \"cd backend && node server.js\" && start cmd /k \"cd frontend2 && npm run dev\""
+  }
+}
