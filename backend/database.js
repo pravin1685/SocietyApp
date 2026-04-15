@@ -118,6 +118,26 @@ function initDB() {
     db.prepare('INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)').run('admin', hash, 'admin', 'Administrator');
   }
 
+  // ── payment_verifications table ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS payment_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      flat_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      utr_number TEXT NOT NULL,
+      payment_mode TEXT DEFAULT 'UPI',
+      screenshot TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      note TEXT DEFAULT '',
+      verified_by TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      verified_at DATETIME,
+      FOREIGN KEY (flat_id) REFERENCES flats(id)
+    );
+  `);
+
   // Migrate: add empty_flat column if not present (for existing DBs)
   try { db.exec('ALTER TABLE maintenance_rates ADD COLUMN empty_flat REAL NOT NULL DEFAULT 0'); } catch (_) {}
   // Migrate: add month_occupancy to maintenance_payments (NULL = use flat default)

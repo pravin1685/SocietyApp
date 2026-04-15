@@ -81,5 +81,7 @@
   "user_management": "युजर व्यवस्थापन",
   "notices": "सूचना",
   "reminders": "थकबाकी यादी",
-  "documents": "कागदपत्रे"
+  "documents": "कागदपत्रे",
+  "submit_payment": "पेमेंट सबमिट करा",
+  "verify_payments": "पेमेंट Verify करा"
 }

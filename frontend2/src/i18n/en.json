@@ -81,5 +81,7 @@
   "user_management": "User Management",
   "notices": "Notices",
   "reminders": "Pending Reminders",
-  "documents": "Documents"
+  "documents": "Documents",
+  "submit_payment": "Submit Payment",
+  "verify_payments": "Verify Payments"
 }

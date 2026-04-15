@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +11,7 @@ const MONTH_KEYS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct',
 export default function Maintenance() {
   const { t } = useTranslation();
   const { isAdmin, user } = useAuth();
+  const navigate = useNavigate();
   const [year, setYear] = useState(2024);
   const [summary, setSummary] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -210,17 +212,29 @@ export default function Maintenance() {
           </div>
         );
         return (
-          <div className="card bg-orange-50 border border-orange-200 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-orange-700 font-semibold">⚠️ {pendingMos} महिन्यांचे शुल्क बाकी आहे</p>
-              <p className="text-2xl font-bold text-orange-800">₹{pendingAmt.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-orange-600 mt-0.5">{myFlat.flat_no} — {year}</p>
+          <div className="card bg-orange-50 border border-orange-200 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-orange-700 font-semibold">⚠️ {pendingMos} महिन्यांचे शुल्क बाकी आहे</p>
+                <p className="text-2xl font-bold text-orange-800">₹{pendingAmt.toLocaleString('en-IN')}</p>
+                <p className="text-xs text-orange-600 mt-0.5">{myFlat.flat_no} — {year}</p>
+              </div>
             </div>
-            <button
-              onClick={() => setQrModal({ flatNo: myFlat.flat_no, pendingAmount: pendingAmt, pendingMonths: pendingMos })}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2 text-sm">
-              💳 Pay Now — QR Code
-            </button>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={() => setQrModal({ flatNo: myFlat.flat_no, pendingAmount: pendingAmt, pendingMonths: pendingMos })}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl transition flex items-center gap-2 text-sm">
+                📱 QR Code ने Pay करा
+              </button>
+              <button
+                onClick={() => navigate('/pay')}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-xl transition flex items-center gap-2 text-sm">
+                📤 UTR Submit करा
+              </button>
+            </div>
+            <p className="text-xs text-orange-600">
+              💡 UPI ने pay केल्यावर "UTR Submit करा" button दाबा — Admin verify केल्यावर payment auto-update होईल
+            </p>
           </div>
         );
       })()}

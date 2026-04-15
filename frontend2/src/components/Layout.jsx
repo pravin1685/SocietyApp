@@ -12,9 +12,11 @@ const navItems = [
   { path: '/ledger',     icon: '📒', key: 'ledger',           adminOnly: false },
   { path: '/reports',    icon: '📄', key: 'reports',          adminOnly: false },
   { path: '/documents',  icon: '📁', key: 'documents',        adminOnly: false },
+  { path: '/pay',        icon: '💳', key: 'submit_payment',   adminOnly: false, userOnly: true },
   { path: '/users',      icon: '👥', key: 'user_management',  adminOnly: true  },
   { path: '/notices',    icon: '📢', key: 'notices',          adminOnly: true  },
   { path: '/reminders',  icon: '🔔', key: 'reminders',        adminOnly: true  },
+  { path: '/verify',     icon: '✅', key: 'verify_payments',  adminOnly: true  },
   { path: '/settings',   icon: '⚙️', key: 'settings',         adminOnly: true  },
 ];
 
@@ -37,7 +39,9 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
-  const items = navItems.filter(item => !item.adminOnly || isAdmin);
+  const items = navItems.filter(item =>
+    (!item.adminOnly || isAdmin) && (!item.userOnly || !isAdmin)
+  );
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

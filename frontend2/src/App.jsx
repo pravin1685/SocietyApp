@@ -14,6 +14,8 @@ import Settings from './pages/Settings';
 import Notices from './pages/Notices';
 import PendingReminders from './pages/PendingReminders';
 import DocumentVault from './pages/DocumentVault';
+import SubmitPayment from './pages/SubmitPayment';
+import PaymentVerification from './pages/PaymentVerification';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -44,7 +46,9 @@ function AppRoutes() {
       <Route path="/notices"   element={<ProtectedRoute><Notices /></ProtectedRoute>} />
       <Route path="/reminders" element={<ProtectedRoute><PendingReminders /></ProtectedRoute>} />
       <Route path="/documents" element={<ProtectedRoute><DocumentVault /></ProtectedRoute>} />
-      <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/settings"      element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/pay"           element={<ProtectedRoute><SubmitPayment /></ProtectedRoute>} />
+      <Route path="/verify"        element={<ProtectedRoute><PaymentVerification /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
