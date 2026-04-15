@@ -2,10 +2,8 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-// In production (Render), use /data/ persistent disk. Locally use __dirname.
-const DB_PATH = process.env.NODE_ENV === 'production'
-  ? '/data/society.db'
-  : path.join(__dirname, 'society.db');
+// Use DB_PATH env var if set, otherwise use app directory
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'society.db');
 const db = new Database(DB_PATH);
 
 db.pragma('journal_mode = WAL');
