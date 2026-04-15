@@ -70,10 +70,51 @@ export default function Settings() {
     reader.readAsDataURL(file);
   };
 
+  // ── Backup / Restore ───────────────────────────────────────────────────────
+  const importRef = useRef(null);
+  const [restoring, setRestoring] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const res = await axios.get('/api/backup/export');
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const date = new Date().toISOString().slice(0,10);
+      a.href = url;
+      a.download = `society-backup-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded! 💾');
+    } catch { toast.error('Export failed'); }
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        setRestoring(true);
+        const data = JSON.parse(ev.target.result);
+        const res  = await axios.post('/api/backup/restore', data);
+        toast.success(`✅ Restore done! Flats: ${res.data.stats.flats}, Payments: ${res.data.stats.payments}`);
+        load();
+      } catch (err) {
+        toast.error('Restore failed: ' + (err.response?.data?.error || err.message));
+      } finally {
+        setRestoring(false);
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const tabs = [
     { id: 'society',  icon: '🏢', label: 'Society Info'     },
     { id: 'upi',      icon: '💳', label: 'UPI / Payment'    },
     { id: 'rates',    icon: '💰', label: 'Maintenance Rates' },
+    { id: 'backup',   icon: '💾', label: 'Backup / Restore'  },
   ];
 
   return (
@@ -197,6 +238,55 @@ export default function Settings() {
             {rates.sort((a,b) => b.year - a.year).map(r => (
               <RateRow key={r.year} rate={r} onSave={saveRate} />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Backup / Restore Tab ── */}
+      {activeTab === 'backup' && (
+        <div className="space-y-4">
+          {/* Export */}
+          <div className="card space-y-4">
+            <h3 className="font-semibold text-gray-700 flex items-center gap-2">📤 Data Export — Backup</h3>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
+              📌 सर्व flats, payments, ledger, settings चा backup JSON file मध्ये download होईल.
+              हे file safe ठेवा — restore साठी लागेल.
+            </div>
+            <button onClick={handleExport}
+              className="btn-primary flex items-center gap-2">
+              💾 Download Backup File
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="card space-y-4">
+            <h3 className="font-semibold text-gray-700 flex items-center gap-2">📥 Data Restore — Import</h3>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+              ⚠️ <strong>Warning:</strong> Restore केल्यावर सध्याचा सर्व data delete होऊन backup चा data येईल.
+              Users delete होणार नाहीत.
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700">
+              💡 <strong>Use case:</strong> Local PC वरून backup घ्या → Live server वर restore करा.
+              Data migration साठी हे वापरा.
+            </div>
+            <input ref={importRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+            <button onClick={() => importRef.current?.click()}
+              disabled={restoring}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-xl transition flex items-center gap-2 disabled:opacity-50">
+              {restoring ? '⏳ Restoring...' : '📥 Select Backup File & Restore'}
+            </button>
+          </div>
+
+          {/* Instructions */}
+          <div className="card space-y-3">
+            <h3 className="font-semibold text-gray-700">📋 Step-by-Step — Local → Live Migration</h3>
+            <ol className="space-y-2 text-sm text-gray-600">
+              <li className="flex gap-2"><span className="font-bold text-blue-600">1.</span> Local app उघडा (localhost:5173) → Settings → Backup/Restore</li>
+              <li className="flex gap-2"><span className="font-bold text-blue-600">2.</span> <strong>"Download Backup File"</strong> click करा → JSON file save होईल</li>
+              <li className="flex gap-2"><span className="font-bold text-blue-600">3.</span> Live app उघडा (society-app-black.vercel.app) → Admin login → Settings → Backup/Restore</li>
+              <li className="flex gap-2"><span className="font-bold text-blue-600">4.</span> <strong>"Select Backup File & Restore"</strong> click करा → JSON file select करा</li>
+              <li className="flex gap-2"><span className="font-bold text-blue-600">5.</span> ✅ Done! सर्व data live वर येईल</li>
+            </ol>
           </div>
         </div>
       )}

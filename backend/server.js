@@ -21,6 +21,7 @@ app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/outstanding', require('./routes/outstanding'));
 app.use('/api/ledger', require('./routes/ledger'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/backup',   require('./routes/backup'));
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 
