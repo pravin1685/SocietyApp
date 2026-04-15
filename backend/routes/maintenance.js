@@ -11,10 +11,12 @@ router.get('/rates', (req, res) => {
 });
 
 router.put('/rates/:year', adminOnly, (req, res) => {
-  const { without_noc, with_noc, empty_flat } = req.body;
-  db.prepare(`INSERT INTO maintenance_rates (year, without_noc, with_noc, empty_flat) VALUES (?,?,?,?)
-    ON CONFLICT(year) DO UPDATE SET without_noc=excluded.without_noc, with_noc=excluded.with_noc, empty_flat=excluded.empty_flat`)
-    .run(req.params.year, without_noc, with_noc, empty_flat ?? 0);
+  const { without_noc, with_noc, empty_flat, shop_rate } = req.body;
+  db.prepare(`INSERT INTO maintenance_rates (year, without_noc, with_noc, empty_flat, shop_rate) VALUES (?,?,?,?,?)
+    ON CONFLICT(year) DO UPDATE SET
+      without_noc=excluded.without_noc, with_noc=excluded.with_noc,
+      empty_flat=excluded.empty_flat, shop_rate=excluded.shop_rate`)
+    .run(req.params.year, without_noc, with_noc, empty_flat ?? 0, shop_rate ?? 150);
   res.json({ message: 'Rates updated' });
 });
 
@@ -35,7 +37,7 @@ router.get('/', (req, res) => {
   if (year) params.push(year);
 
   const rows = db.prepare(`
-    SELECT mp.*, f.flat_no, f.owner_name, f.is_rented
+    SELECT mp.*, f.flat_no, f.owner_name, f.is_rented, f.is_shop
     FROM maintenance_payments mp
     JOIN flats f ON f.id = mp.flat_id
     WHERE 1=1 ${flatFilter} ${year ? 'AND mp.year = ?' : ''}
@@ -53,11 +55,11 @@ router.get('/summary/:year', (req, res) => {
 
   // Get the year's rates for monthly_rate calculation
   const rateRow = db.prepare('SELECT * FROM maintenance_rates WHERE year = ?').get(year)
-    || { without_noc: 250, with_noc: 500, empty_flat: 0 };
+    || { without_noc: 250, with_noc: 500, empty_flat: 0, shop_rate: 150 };
 
   const rows = db.prepare(`
     SELECT
-      f.id, f.flat_no, f.owner_name, f.is_rented, f.tenant_name, f.mobile,
+      f.id, f.flat_no, f.owner_name, f.is_rented, f.is_shop, f.tenant_name, f.mobile,
       SUM(CASE WHEN mp.status='paid' THEN mp.amount ELSE 0 END) as total_paid,
       SUM(CASE WHEN mp.status='pending' THEN 1 ELSE 0 END) as pending_months,
       COUNT(mp.id) as total_months
@@ -68,10 +70,11 @@ router.get('/summary/:year', (req, res) => {
     ORDER BY f.sl_no
   `).all(...params);
 
-  // Attach monthly_rate per flat based on type
+  // Attach monthly_rate — shops use shop_rate, flats use is_rented type
   const result = rows.map(f => ({
     ...f,
-    monthly_rate: f.is_rented === 1 ? rateRow.with_noc
+    monthly_rate: f.is_shop === 1 ? (rateRow.shop_rate || 150)
+                : f.is_rented === 1 ? rateRow.with_noc
                 : f.is_rented === 2 ? rateRow.empty_flat
                 : rateRow.without_noc,
   }));

@@ -79,7 +79,8 @@
       "Bash(powershell -Command \"Start-Sleep 5; netstat -ano | Select-String ':5000|:5173'\")",
       "Bash(Select-String \"LISTENING\")",
       "Bash(powershell -Command \"Start-Sleep 5; netstat -ano | Select-String 'LISTENING' | Select-String ':5000|:5173'\")",
-      "Bash(powershell -Command \"Start-Sleep 4; netstat -ano | Select-String 'LISTENING' | Select-String ':5000|:5173'\")"
+      "Bash(powershell -Command \"Start-Sleep 4; netstat -ano | Select-String 'LISTENING' | Select-String ':5000|:5173'\")",
+      "Bash(node seed-shops.js)"
     ]
   }
 }

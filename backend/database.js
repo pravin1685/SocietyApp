@@ -142,6 +142,10 @@ function initDB() {
   try { db.exec('ALTER TABLE maintenance_rates ADD COLUMN empty_flat REAL NOT NULL DEFAULT 0'); } catch (_) {}
   // Migrate: add month_occupancy to maintenance_payments (NULL = use flat default)
   try { db.exec('ALTER TABLE maintenance_payments ADD COLUMN month_occupancy INTEGER DEFAULT NULL'); } catch (_) {}
+  // Migrate: add shop_rate to maintenance_rates
+  try { db.exec('ALTER TABLE maintenance_rates ADD COLUMN shop_rate REAL NOT NULL DEFAULT 150'); } catch (_) {}
+  // Migrate: add is_shop flag to flats (0=flat, 1=shop)
+  try { db.exec('ALTER TABLE flats ADD COLUMN is_shop INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
   const ratesStmt = db.prepare('INSERT OR IGNORE INTO maintenance_rates (year, without_noc, with_noc, empty_flat) VALUES (?, ?, ?, ?)');
   [2023, 2024, 2025].forEach(y => ratesStmt.run(y, 250, 500, 0));

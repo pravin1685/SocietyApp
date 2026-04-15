@@ -41,9 +41,9 @@ export default function Settings() {
   };
 
   // ── Maintenance Rate ────────────────────────────────────────────────────────
-  const saveRate = async (year, without_noc, with_noc, empty_flat = 0) => {
+  const saveRate = async (year, without_noc, with_noc, empty_flat = 0, shop_rate = 150) => {
     try {
-      await axios.put(`/api/maintenance/rates/${year}`, { without_noc, with_noc, empty_flat });
+      await axios.put(`/api/maintenance/rates/${year}`, { without_noc, with_noc, empty_flat, shop_rate });
       toast.success(`${year} चा दर saved! ✅`);
       load();
     } catch { toast.error('Error saving rate'); }
@@ -298,12 +298,14 @@ function RateRow({ rate, onSave }) {
   const [wo, setWo]   = useState(rate.without_noc);
   const [wi, setWi]   = useState(rate.with_noc);
   const [em, setEm]   = useState(rate.empty_flat ?? 0);
+  const [sh, setSh]   = useState(rate.shop_rate  ?? 150);
   const [dirty, setDirty] = useState(false);
 
   const monthly = [
     { icon: '🏠', label: 'Owner (Without NOC)', val: wo, set: v => { setWo(v); setDirty(true); }, color: 'text-green-700' },
     { icon: '🔑', label: 'Tenant (With NOC)',   val: wi, set: v => { setWi(v); setDirty(true); }, color: 'text-yellow-700' },
     { icon: '🚪', label: 'Empty / Vacant',       val: em, set: v => { setEm(v); setDirty(true); }, color: 'text-gray-500' },
+    { icon: '🏪', label: 'Shop Rate',            val: sh, set: v => { setSh(v); setDirty(true); }, color: 'text-purple-700' },
   ];
 
   return (
@@ -312,7 +314,7 @@ function RateRow({ rate, onSave }) {
         <span className="text-base font-bold text-blue-700">{rate.year}</span>
         {dirty && (
           <button
-            onClick={() => { onSave(rate.year, parseFloat(wo), parseFloat(wi), parseFloat(em)); setDirty(false); }}
+            onClick={() => { onSave(rate.year, parseFloat(wo), parseFloat(wi), parseFloat(em), parseFloat(sh)); setDirty(false); }}
             className="btn-primary text-xs px-4 py-1.5">
             💾 Save
           </button>
