@@ -54,12 +54,16 @@ const seedAll = db.transaction(() => {
     VALUES (?, 2024, ?, ?, ?)
   `);
 
-  let added = 0, pmts = 0;
+  let added = 0, updated = 0, pmts = 0;
   for (const shop of shops) {
     const exists = db.prepare('SELECT id FROM flats WHERE flat_no = ?').get(shop.flat_no);
     if (!exists) {
       insFlat.run(shop.sl_no, shop.flat_no, shop.owner_name, shop.is_rented);
       added++;
+    } else {
+      // Fix: ensure is_shop=1 even if record already existed (e.g. imported from Excel without flag)
+      db.prepare('UPDATE flats SET is_shop = 1 WHERE flat_no = ?').run(shop.flat_no);
+      updated++;
     }
     const flat = db.prepare('SELECT id FROM flats WHERE flat_no = ?').get(shop.flat_no);
     if (!flat) continue;
@@ -70,7 +74,7 @@ const seedAll = db.transaction(() => {
       pmts++;
     }
   }
-  console.log(`✅ Shops added: ${added}, Payments seeded: ${pmts}`);
+  console.log(`✅ Shops added: ${added}, Updated is_shop flag: ${updated}, Payments seeded: ${pmts}`);
 });
 
 seedAll();
