@@ -4,17 +4,21 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
-const EMPTY_FORM = { sl_no: '', flat_no: '', owner_name: '', tenant_name: '', mobile: '', is_rented: 0 };
+const EMPTY_FLAT_FORM  = { sl_no: '', flat_no: '', owner_name: '', tenant_name: '', mobile: '', is_rented: 0, is_shop: 0 };
 
-// Occupancy types with labels, icons and colors
 const OCC_TYPES = [
-  { value: 0, icon: '🏠', label: 'Owner Occupied', labelMr: 'मालक', color: 'bg-green-100 text-green-700 border-green-200' },
+  { value: 0, icon: '🏠', label: 'Owner Occupied', labelMr: 'मालक',    color: 'bg-green-100 text-green-700 border-green-200' },
   { value: 1, icon: '🔑', label: 'Tenant / Rented', labelMr: 'भाडेकरू', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
   { value: 2, icon: '🚪', label: 'Empty / Vacant',  labelMr: 'रिकामे',  color: 'bg-gray-100 text-gray-500 border-gray-200' },
 ];
 
-function OccBadge({ val }) {
-  const t = OCC_TYPES.find(o => o.value === val) || OCC_TYPES[0];
+function OccBadge({ flat }) {
+  if (flat.is_shop === 1) return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-purple-100 text-purple-700 border-purple-200">
+      🏪 दुकान
+    </span>
+  );
+  const t = OCC_TYPES.find(o => o.value === flat.is_rented) || OCC_TYPES[0];
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${t.color}`}>
       {t.icon} {t.labelMr}
@@ -25,15 +29,16 @@ function OccBadge({ val }) {
 export default function FlatDirectory() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
-  const [flats, setFlats]   = useState([]);
-  const [rates, setRates]   = useState([]);
-  const [year, setYear]     = useState(new Date().getFullYear());
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState(-1); // -1 = all
-  const [modal, setModal]   = useState(false);
-  const [form, setForm]     = useState(EMPTY_FORM);
-  const [editId, setEditId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [flats,    setFlats]    = useState([]);
+  const [rates,    setRates]    = useState([]);
+  const [year,     setYear]     = useState(new Date().getFullYear());
+  const [search,   setSearch]   = useState('');
+  const [category, setCategory] = useState('all');   // 'all' | 'flat' | 'shop'
+  const [filterType, setFilterType] = useState(-1);  // occ type filter (only for flats)
+  const [modal,    setModal]    = useState(false);
+  const [form,     setForm]     = useState(EMPTY_FLAT_FORM);
+  const [editId,   setEditId]   = useState(null);
+  const [loading,  setLoading]  = useState(true);
 
   const load = () => {
     setLoading(true);
@@ -48,37 +53,53 @@ export default function FlatDirectory() {
 
   useEffect(() => { load(); }, []);
 
-  // Get the active rate row for selected year
-  const rateRow = rates.find(r => r.year == year) || { without_noc: 250, with_noc: 500, empty_flat: 0 };
+  const rateRow = rates.find(r => r.year == year) || { without_noc: 250, with_noc: 500, empty_flat: 0, shop_rate: 150 };
 
-  // Monthly rate per flat based on occupancy type
   const getMonthlyRate = (flat) => {
+    if (flat.is_shop === 1) return rateRow.shop_rate ?? 150;
     if (flat.is_rented === 1) return rateRow.with_noc;
     if (flat.is_rented === 2) return rateRow.empty_flat;
     return rateRow.without_noc;
   };
 
-  const filtered = flats
-    .filter(f => filterType === -1 || f.is_rented === filterType)
-    .filter(f =>
-      f.flat_no?.toLowerCase().includes(search.toLowerCase()) ||
-      f.owner_name?.toLowerCase().includes(search.toLowerCase()) ||
-      f.tenant_name?.toLowerCase().includes(search.toLowerCase()) ||
-      f.mobile?.includes(search)
-    );
+  // Separate flats vs shops
+  const onlyFlats = flats.filter(f => !f.is_shop);
+  const onlyShops = flats.filter(f =>  f.is_shop);
 
-  const openAdd  = () => { setForm(EMPTY_FORM); setEditId(null); setModal(true); };
+  // Apply category filter first
+  const byCat = category === 'flat' ? onlyFlats
+              : category === 'shop' ? onlyShops
+              : flats;
+
+  // Apply occupancy sub-filter (only meaningful for flats)
+  const byOcc = filterType === -1 ? byCat
+              : byCat.filter(f => f.is_rented === filterType);
+
+  // Apply search
+  const filtered = byOcc.filter(f =>
+    f.flat_no?.toLowerCase().includes(search.toLowerCase()) ||
+    f.owner_name?.toLowerCase().includes(search.toLowerCase()) ||
+    f.tenant_name?.toLowerCase().includes(search.toLowerCase()) ||
+    f.mobile?.includes(search)
+  );
+
+  const openAdd  = () => {
+    const isShop = category === 'shop';
+    setForm({ ...EMPTY_FLAT_FORM, is_shop: isShop ? 1 : 0,
+      flat_no: isShop ? 'SHOP-' : 'FLAT-' });
+    setEditId(null); setModal(true);
+  };
   const openEdit = (flat) => { setForm({ ...flat }); setEditId(flat.id); setModal(true); };
 
   const handleSave = async () => {
-    if (!form.flat_no || !form.owner_name) { toast.error('Flat No आणि Owner Name required!'); return; }
+    if (!form.flat_no || !form.owner_name) { toast.error('Flat/Shop No आणि Owner Name required!'); return; }
     try {
       if (editId) {
         await axios.put(`/api/flats/${editId}`, form);
-        toast.success('Flat updated! ✅');
+        toast.success(`${form.is_shop ? 'Shop' : 'Flat'} updated! ✅`);
       } else {
         await axios.post('/api/flats', form);
-        toast.success('Flat added! ✅');
+        toast.success(`${form.is_shop ? 'Shop' : 'Flat'} added! ✅`);
       }
       setModal(false); load();
     } catch (e) {
@@ -89,60 +110,101 @@ export default function FlatDirectory() {
   const handleDelete = async (id) => {
     if (!confirm(t('confirm_delete'))) return;
     await axios.delete(`/api/flats/${id}`);
-    toast.success('Flat deleted!'); load();
+    toast.success('Deleted!'); load();
   };
 
-  // Preview monthly rate in modal for selected type
-  const previewRate = OCC_TYPES.find(o => o.value === form.is_rented);
-  const previewAmt  = form.is_rented === 1 ? rateRow.with_noc
-                    : form.is_rented === 2 ? rateRow.empty_flat
-                    : rateRow.without_noc;
+  // Rate preview in modal
+  const previewAmt = form.is_shop === 1
+    ? (rateRow.shop_rate ?? 150)
+    : form.is_rented === 1 ? rateRow.with_noc
+    : form.is_rented === 2 ? rateRow.empty_flat
+    : rateRow.without_noc;
+
+  const totalMonthly = filtered.reduce((s, f) => s + getMonthlyRate(f), 0);
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
+
+      {/* ── Category Tabs ── */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {[
+          { id: 'all',  label: `सर्व (${flats.length})`,         icon: '📋' },
+          { id: 'flat', label: `🏠 Flats (${onlyFlats.length})`, icon: ''   },
+          { id: 'shop', label: `🏪 Shops (${onlyShops.length})`, icon: ''   },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => { setCategory(tab.id); setFilterType(-1); }}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+              category === tab.id ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex gap-2 flex-wrap">
           <input className="input w-48 text-sm" placeholder={`🔍 ${t('search')}...`}
             value={search} onChange={e => setSearch(e.target.value)} />
-          {/* Year selector for rate display */}
           <select value={year} onChange={e => setYear(Number(e.target.value))} className="input w-24 text-sm">
             {rates.map(r => <option key={r.year}>{r.year}</option>)}
           </select>
         </div>
         {isAdmin && (
           <button onClick={openAdd} className="btn-primary flex items-center gap-2">
-            ➕ {t('add')} Flat
+            ➕ {t('add')} {category === 'shop' ? 'Shop' : 'Flat'}
           </button>
         )}
       </div>
 
-      {/* Rate info bar */}
+      {/* ── Rate Info Bar ── */}
       <div className="flex flex-wrap gap-2 items-center bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
-        <span className="text-xs text-blue-600 font-semibold mr-1">{year} Rate:</span>
-        <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">🏠 Owner — ₹{rateRow.without_noc}/mo</span>
-        <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-medium">🔑 Tenant — ₹{rateRow.with_noc}/mo</span>
-        <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">🚪 Empty — ₹{rateRow.empty_flat}/mo</span>
+        <span className="text-xs text-blue-600 font-semibold mr-1">{year} Rates:</span>
+        {(category === 'all' || category === 'flat') && <>
+          <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">🏠 Owner — ₹{rateRow.without_noc}/mo</span>
+          <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-medium">🔑 Tenant — ₹{rateRow.with_noc}/mo</span>
+          <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">🚪 Empty — ₹{rateRow.empty_flat}/mo</span>
+        </>}
+        {(category === 'all' || category === 'shop') && (
+          <span className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-medium">🏪 Shop — ₹{rateRow.shop_rate ?? 150}/mo</span>
+        )}
         <span className="text-xs text-blue-400 ml-auto">⚙️ Settings मध्ये rate बदला</span>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'एकूण Flats', val: flats.length, color: 'bg-blue-50 text-blue-700', filter: -1 },
-          { label: '🏠 Owner', val: flats.filter(f => f.is_rented === 0).length, color: 'bg-green-50 text-green-700', filter: 0 },
-          { label: '🔑 Tenant', val: flats.filter(f => f.is_rented === 1).length, color: 'bg-yellow-50 text-yellow-700', filter: 1 },
-          { label: '🚪 Empty', val: flats.filter(f => f.is_rented === 2).length, color: 'bg-gray-50 text-gray-600', filter: 2 },
-        ].map(s => (
-          <button key={s.label} onClick={() => setFilterType(filterType === s.filter ? -1 : s.filter)}
-            className={`rounded-xl p-3 text-center transition border-2 ${s.color} ${filterType === s.filter ? 'border-blue-400 shadow' : 'border-transparent'}`}>
-            <p className="text-xl font-bold">{s.val}</p>
-            <p className="text-xs font-medium">{s.label}</p>
-          </button>
-        ))}
-      </div>
+      {/* ── Stats Cards ── */}
+      {category !== 'shop' && (
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: '📋 सर्व Flats', val: onlyFlats.length, filter: -1, color: 'bg-blue-50 text-blue-700' },
+            { label: '🏠 Owner',  val: onlyFlats.filter(f => f.is_rented === 0).length, filter: 0, color: 'bg-green-50 text-green-700' },
+            { label: '🔑 Tenant', val: onlyFlats.filter(f => f.is_rented === 1).length, filter: 1, color: 'bg-yellow-50 text-yellow-700' },
+            { label: '🚪 Empty',  val: onlyFlats.filter(f => f.is_rented === 2).length, filter: 2, color: 'bg-gray-50 text-gray-600' },
+          ].map(s => (
+            <button key={s.label} onClick={() => { setCategory('flat'); setFilterType(filterType === s.filter ? -1 : s.filter); }}
+              className={`rounded-xl p-3 text-center transition border-2 ${s.color} ${filterType === s.filter ? 'border-blue-400 shadow' : 'border-transparent'}`}>
+              <p className="text-xl font-bold">{s.val}</p>
+              <p className="text-xs font-medium">{s.label}</p>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Table */}
+      {category === 'shop' && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl p-4 bg-purple-50 border border-purple-100 text-center">
+            <p className="text-2xl font-bold text-purple-700">{onlyShops.length}</p>
+            <p className="text-xs text-purple-600 font-medium">🏪 एकूण Shops</p>
+          </div>
+          <div className="rounded-xl p-4 bg-blue-50 border border-blue-100 text-center">
+            <p className="text-2xl font-bold text-blue-700">
+              ₹{(onlyShops.length * (rateRow.shop_rate ?? 150)).toLocaleString('en-IN')}
+            </p>
+            <p className="text-xs text-blue-600 font-medium">Monthly Collection (संभाव्य)</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Table ── */}
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-10">
@@ -154,12 +216,12 @@ export default function FlatDirectory() {
               <thead>
                 <tr>
                   <th className="table-header">#</th>
-                  <th className="table-header">{t('flat_no')}</th>
+                  <th className="table-header">{category === 'shop' ? 'Shop No' : t('flat_no')}</th>
                   <th className="table-header">{t('owner_name')}</th>
                   <th className="table-header">{t('tenant_name')}</th>
                   <th className="table-header">{t('mobile')}</th>
-                  <th className="table-header">प्रकार / Type</th>
-                  <th className="table-header text-right">₹/महिना Rate</th>
+                  <th className="table-header">प्रकार</th>
+                  <th className="table-header text-right">₹/महिना</th>
                   {isAdmin && <th className="table-header">{t('action')}</th>}
                 </tr>
               </thead>
@@ -167,15 +229,16 @@ export default function FlatDirectory() {
                 {filtered.length === 0 ? (
                   <tr><td colSpan={8} className="text-center py-8 text-gray-400">{t('no_data')}</td></tr>
                 ) : filtered.map((f, i) => (
-                  <tr key={f.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={f.id} className={`hover:bg-gray-50 transition-colors ${f.is_shop ? 'bg-purple-50/30' : ''}`}>
                     <td className="table-cell text-gray-400 text-sm">{i + 1}</td>
                     <td className="table-cell font-bold text-blue-700">{f.flat_no}</td>
                     <td className="table-cell font-medium">{f.owner_name}</td>
                     <td className="table-cell text-gray-500 text-sm">{f.tenant_name || '—'}</td>
                     <td className="table-cell text-sm">{f.mobile || '—'}</td>
-                    <td className="table-cell"><OccBadge val={f.is_rented} /></td>
+                    <td className="table-cell"><OccBadge flat={f} /></td>
                     <td className="table-cell text-right">
                       <span className={`font-bold text-sm ${
+                        f.is_shop     === 1 ? 'text-purple-700' :
                         f.is_rented === 2 ? 'text-gray-400' :
                         f.is_rented === 1 ? 'text-yellow-700' : 'text-green-700'
                       }`}>
@@ -193,14 +256,13 @@ export default function FlatDirectory() {
                   </tr>
                 ))}
               </tbody>
-              {/* Footer totals */}
               <tfoot>
                 <tr className="bg-gray-50 font-semibold text-sm">
                   <td className="table-cell" colSpan={6}>
-                    <span className="text-gray-600">एकूण Monthly Collection ({year})</span>
+                    एकूण Monthly ({year}) — {filtered.length} units
                   </td>
                   <td className="table-cell text-right text-blue-700 font-bold">
-                    ₹{flats.reduce((s, f) => s + getMonthlyRate(f), 0).toLocaleString('en-IN')}/mo
+                    ₹{totalMonthly.toLocaleString('en-IN')}/mo
                   </td>
                   {isAdmin && <td />}
                 </tr>
@@ -210,15 +272,35 @@ export default function FlatDirectory() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* ── Modal ── */}
       {modal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b">
-              <h3 className="font-bold text-lg">{editId ? '✏️ Edit' : '➕ Add'} Flat</h3>
+              <h3 className="font-bold text-lg">
+                {editId ? '✏️ Edit' : '➕ Add'} {form.is_shop ? '🏪 Shop' : '🏠 Flat'}
+              </h3>
               <button onClick={() => setModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
             <div className="p-5 space-y-4">
+
+              {/* Unit type toggle (add mode only) */}
+              {!editId && (
+                <div>
+                  <label className="label">Unit प्रकार</label>
+                  <div className="flex gap-2">
+                    <button onClick={() => setForm(f => ({ ...f, is_shop: 0, flat_no: f.flat_no.startsWith('SHOP') ? 'FLAT-' : f.flat_no }))}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition ${!form.is_shop ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600'}`}>
+                      🏠 Flat
+                    </button>
+                    <button onClick={() => setForm(f => ({ ...f, is_shop: 1, flat_no: f.flat_no.startsWith('FLAT') ? 'SHOP-' : f.flat_no }))}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition ${form.is_shop ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600'}`}>
+                      🏪 Shop
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Sl. No</label>
@@ -226,18 +308,20 @@ export default function FlatDirectory() {
                     onChange={e => setForm({...form, sl_no: e.target.value})} />
                 </div>
                 <div>
-                  <label className="label">{t('flat_no')}</label>
+                  <label className="label">{form.is_shop ? 'Shop No' : t('flat_no')}</label>
                   <input className="input" value={form.flat_no}
-                    onChange={e => setForm({...form, flat_no: e.target.value})} placeholder="FLAT-01" />
+                    onChange={e => setForm({...form, flat_no: e.target.value})}
+                    placeholder={form.is_shop ? 'SHOP-18' : 'FLAT-37'} />
                 </div>
               </div>
+
               <div>
                 <label className="label">{t('owner_name')} — मालकाचे नाव</label>
                 <input className="input" value={form.owner_name}
                   onChange={e => setForm({...form, owner_name: e.target.value})} />
               </div>
               <div>
-                <label className="label">{t('tenant_name')} — भाडेकरूचे नाव (असल्यास)</label>
+                <label className="label">{t('tenant_name')} — भाडेकरूचे नाव</label>
                 <input className="input" value={form.tenant_name || ''}
                   onChange={e => setForm({...form, tenant_name: e.target.value})} />
               </div>
@@ -247,36 +331,37 @@ export default function FlatDirectory() {
                   onChange={e => setForm({...form, mobile: e.target.value})} />
               </div>
 
-              {/* Occupancy type selector with rate preview */}
-              <div>
-                <label className="label">Flat प्रकार — Occupancy Type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {OCC_TYPES.map(o => (
-                    <button key={o.value}
-                      onClick={() => setForm({...form, is_rented: o.value})}
-                      className={`py-3 px-2 rounded-xl border-2 text-center transition ${
-                        form.is_rented === o.value
-                          ? 'border-blue-500 bg-blue-50 shadow'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}>
-                      <div className="text-2xl mb-1">{o.icon}</div>
-                      <div className="text-xs font-semibold text-gray-700">{o.labelMr}</div>
-                      <div className="text-xs text-gray-400">{o.label}</div>
-                    </button>
-                  ))}
+              {/* Occupancy (only for flats) */}
+              {!form.is_shop && (
+                <div>
+                  <label className="label">Flat प्रकार — Occupancy Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {OCC_TYPES.map(o => (
+                      <button key={o.value}
+                        onClick={() => setForm({...form, is_rented: o.value})}
+                        className={`py-3 px-2 rounded-xl border-2 text-center transition ${
+                          form.is_rented === o.value ? 'border-blue-500 bg-blue-50 shadow' : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                        <div className="text-2xl mb-1">{o.icon}</div>
+                        <div className="text-xs font-semibold text-gray-700">{o.labelMr}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Rate preview for selected type */}
-              <div className={`rounded-xl p-3 border ${previewRate?.color || 'bg-gray-50 border-gray-200'} flex items-center justify-between`}>
+              {/* Rate preview */}
+              <div className={`rounded-xl p-3 border flex items-center justify-between ${
+                form.is_shop ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+              }`}>
                 <div>
                   <p className="text-xs font-medium text-gray-600">
-                    {previewRate?.icon} {previewRate?.labelMr} — Monthly Maintenance Rate
+                    {form.is_shop ? '🏪 Shop' : OCC_TYPES.find(o => o.value === form.is_rented)?.labelMr} — Monthly Rate
                   </p>
-                  <p className="text-xs text-gray-400">{year} साठी assigned rate:</p>
+                  <p className="text-xs text-gray-400">{year} साठी</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-blue-700">
+                  <p className={`text-2xl font-bold ${form.is_shop ? 'text-purple-700' : 'text-blue-700'}`}>
                     {previewAmt > 0 ? `₹${previewAmt.toLocaleString('en-IN')}` : 'Free'}
                   </p>
                   <p className="text-xs text-gray-400">per month</p>

@@ -13,6 +13,7 @@ export default function Maintenance() {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
   const [year, setYear] = useState(2024);
+  const [unitType, setUnitType] = useState('flat'); // 'flat' or 'shop'
   const [summary, setSummary] = useState([]);
   const [payments, setPayments] = useState([]);
   const [rates, setRates] = useState([]);
@@ -41,16 +42,23 @@ export default function Maintenance() {
 
   useEffect(() => { load(); }, [year]);
 
+  const yearRate = rates.find(r => r.year == year);
+
+  // Filtered summary based on current tab
+  const filteredSummary = summary.filter(f => unitType === 'flat' ? !f.is_shop : !!f.is_shop);
+
+  const flatCount = summary.filter(f => !f.is_shop).length;
+  const shopCount = summary.filter(f => !!f.is_shop).length;
+
   const getPayment = (flatId, month) =>
     payments.find(p => p.flat_id === flatId && p.month === month);
 
-  // Get rate for a given occupancy type
+  // Get rate for a given occupancy type (flats only)
   const getRateForType = (occType) => {
-    const yr = rates.find(r => r.year == year);
-    if (!yr) return 0;
-    if (occType === 1) return yr.with_noc;
-    if (occType === 2) return yr.empty_flat;
-    return yr.without_noc;
+    if (!yearRate) return 0;
+    if (occType === 1) return yearRate.with_noc;
+    if (occType === 2) return yearRate.empty_flat;
+    return yearRate.without_noc;
   };
 
   const openEdit = (flat, month) => {
@@ -58,9 +66,17 @@ export default function Maintenance() {
     const existing = getPayment(flat.id, month);
     setSelectedFlat(flat);
     setEditPayment({ flat_id: flat.id, year, month, ...existing });
-    // month_occupancy: use existing override, else flat default
-    const occType = existing?.month_occupancy != null ? existing.month_occupancy : flat.is_rented;
-    const defaultRate = getRateForType(occType);
+
+    let defaultRate;
+    let occType;
+    if (flat.is_shop) {
+      defaultRate = yearRate?.shop_rate ?? 150;
+      occType = null; // shops don't use occupancy type
+    } else {
+      occType = existing?.month_occupancy != null ? existing.month_occupancy : flat.is_rented;
+      defaultRate = getRateForType(occType);
+    }
+
     setForm({
       amount: existing?.amount > 0 ? existing.amount : defaultRate || '',
       status: existing?.status || 'pending',
@@ -90,7 +106,7 @@ export default function Maintenance() {
     const p = getPayment(flat.id, month);
     if (!p) return 'bg-gray-100 text-gray-400';
     if (p.status === 'paid') return 'bg-green-100 text-green-700 font-semibold';
-    // empty flat (occ=2) pending → gray-ish
+    if (flat.is_shop) return 'bg-red-100 text-red-600';
     const occ = p.month_occupancy != null ? p.month_occupancy : flat.is_rented;
     if (occ === 2) return 'bg-gray-200 text-gray-500';
     return 'bg-red-100 text-red-600';
@@ -99,8 +115,11 @@ export default function Maintenance() {
   const cellText = (flat, month) => {
     const p = getPayment(flat.id, month);
     if (!p) return '—';
+    if (flat.is_shop) {
+      if (p.status === 'paid') return `₹${p.amount}`;
+      return t('pending');
+    }
     const occ = p.month_occupancy != null ? p.month_occupancy : flat.is_rented;
-    // Show icon only when month_occupancy overrides flat default
     const icon = p.month_occupancy != null && p.month_occupancy !== flat.is_rented
       ? OCC_ICONS[occ] + ' ' : '';
     if (p.status === 'paid') return `${icon}₹${p.amount}`;
@@ -108,21 +127,24 @@ export default function Maintenance() {
     return `${icon}${t('pending')}`;
   };
 
-  const yearRate = rates.find(r => r.year == year);
-
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select value={year} onChange={e => setYear(e.target.value)} className="input w-28 text-sm">
             {[2023,2024,2025].map(y => <option key={y}>{y}</option>)}
           </select>
-          {yearRate && (
-            <div className="flex gap-2 text-xs">
-              <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full">{t('without_noc')}: ₹{yearRate.without_noc}/mo</span>
-              <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">{t('with_noc')}: ₹{yearRate.with_noc}/mo</span>
+          {yearRate && unitType === 'flat' && (
+            <div className="flex gap-2 text-xs flex-wrap">
+              <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full">🏠 Owner: ₹{yearRate.without_noc}/mo</span>
+              <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">🔑 Tenant: ₹{yearRate.with_noc}/mo</span>
             </div>
+          )}
+          {yearRate && unitType === 'shop' && (
+            <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs">
+              🏪 Shop Rate: ₹{yearRate.shop_rate ?? 150}/mo
+            </span>
           )}
         </div>
         {isAdmin && (
@@ -138,13 +160,51 @@ export default function Maintenance() {
         )}
       </div>
 
+      {/* Category Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        {[
+          { key: 'flat', icon: '🏠', label: 'Flats', count: flatCount },
+          { key: 'shop', icon: '🏪', label: 'Shops', count: shopCount },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setUnitType(tab.key)}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition ${
+              unitType === tab.key
+                ? tab.key === 'shop'
+                  ? 'bg-white shadow text-purple-700'
+                  : 'bg-white shadow text-blue-700'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab.icon} {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: t('total_flats'), val: summary.length, color: 'bg-blue-50 text-blue-700' },
-          { label: t('paid'), val: summary.filter(f => f.pending_months === 0 && f.total_months > 0).length, color: 'bg-green-50 text-green-700' },
-          { label: t('total_collected'), val: '₹' + summary.reduce((s, f) => s + (f.total_paid || 0), 0).toLocaleString('en-IN'), color: 'bg-purple-50 text-purple-700' },
-          { label: t('pending'), val: summary.reduce((s, f) => s + (f.pending_months || 0), 0) + ' months', color: 'bg-red-50 text-red-700' },
+          {
+            label: unitType === 'flat' ? t('total_flats') : 'Total Shops',
+            val: filteredSummary.length,
+            color: unitType === 'flat' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700',
+          },
+          {
+            label: t('paid'),
+            val: filteredSummary.filter(f => f.pending_months === 0 && f.total_months > 0).length,
+            color: 'bg-green-50 text-green-700',
+          },
+          {
+            label: t('total_collected'),
+            val: '₹' + filteredSummary.reduce((s, f) => s + (f.total_paid || 0), 0).toLocaleString('en-IN'),
+            color: 'bg-purple-50 text-purple-700',
+          },
+          {
+            label: t('pending'),
+            val: filteredSummary.reduce((s, f) => s + (f.pending_months || 0), 0) + ' months',
+            color: 'bg-red-50 text-red-700',
+          },
         ].map(s => (
           <div key={s.label} className={`rounded-xl p-3 text-center ${s.color}`}>
             <p className="text-xl font-bold">{s.val}</p>
@@ -161,17 +221,19 @@ export default function Maintenance() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="table-header sticky left-0 bg-gray-50 z-10">{t('flat_no')}</th>
+                <tr className={unitType === 'shop' ? 'bg-purple-50' : 'bg-gray-50'}>
+                  <th className={`table-header sticky left-0 z-10 ${unitType === 'shop' ? 'bg-purple-50' : 'bg-gray-50'}`}>{t('flat_no')}</th>
                   <th className="table-header max-w-[120px]">{t('owner_name')}</th>
                   {MONTH_KEYS.map(m => <th key={m} className="table-header text-center px-2">{t(m)}</th>)}
                   <th className="table-header text-center">{t('total')}</th>
                 </tr>
               </thead>
               <tbody>
-                {summary.map(flat => (
-                  <tr key={flat.id} className="hover:bg-gray-50">
-                    <td className="table-cell font-bold text-blue-700 sticky left-0 bg-white">{flat.flat_no}</td>
+                {filteredSummary.map(flat => (
+                  <tr key={flat.id} className={`hover:bg-gray-50 ${flat.is_shop ? 'bg-purple-50/20' : ''}`}>
+                    <td className={`table-cell font-bold sticky left-0 bg-white ${flat.is_shop ? 'text-purple-700' : 'text-blue-700'}`}>
+                      {flat.flat_no}
+                    </td>
                     <td className="table-cell max-w-[120px] truncate">{flat.owner_name}</td>
                     {MONTH_KEYS.map((_, idx) => (
                       <td key={idx}
@@ -192,15 +254,12 @@ export default function Maintenance() {
         </div>
       )}
 
-      {/* User: Pay Now QR Banner */}
+      {/* User: Pay Now QR Banner (flats only) */}
       {!isAdmin && (() => {
-        // Use logged-in user's flat — don't rely on summary[0] which was FLAT-01
-        const myFlat = summary.find(f => f.id === user?.flat_id) || summary[0];
-        if (!myFlat) return null;
+        const myFlat = summary.find(f => f.id === user?.flat_id) || summary.find(f => !f.is_shop);
+        if (!myFlat || myFlat.is_shop) return null;
         const myPending = payments.filter(p => p.status === 'pending' && p.flat_id === myFlat.id);
         const pendingMos = myPending.length;
-        // Pending entries seeded from Excel have amount=0 → use rate per month as fallback
-        const yearRate  = rates.find(r => r.year == year);
         const ratePerMo = myFlat.is_rented === 1 ? (yearRate?.with_noc    || 500)
                         : myFlat.is_rented === 2 ? (yearRate?.empty_flat  ||   0)
                         :                          (yearRate?.without_noc || 250);
@@ -245,44 +304,55 @@ export default function Maintenance() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="flex items-center justify-between p-5 border-b">
               <div>
-                <h3 className="font-bold">{selectedFlat?.flat_no} — {t(MONTH_KEYS[editPayment?.month - 1])} {year}</h3>
+                <h3 className="font-bold">
+                  {selectedFlat?.is_shop ? '🏪' : '🏠'} {selectedFlat?.flat_no} — {t(MONTH_KEYS[editPayment?.month - 1])} {year}
+                </h3>
                 <p className="text-xs text-gray-400">{selectedFlat?.owner_name}</p>
               </div>
               <button onClick={() => setModal(false)} className="text-gray-400 text-xl">✕</button>
             </div>
             <div className="p-5 space-y-4">
-              {/* Month Occupancy Type */}
-              <div>
-                <label className="label">महिन्याचा प्रकार (Month Type)</label>
-                <div className="flex gap-2">
-                  {[
-                    { val: 0, icon: '🏠', label: 'Owner' },
-                    { val: 1, icon: '🔑', label: 'Tenant' },
-                    { val: 2, icon: '🚪', label: 'Empty' },
-                  ].map(opt => (
-                    <button key={opt.val}
-                      onClick={() => {
-                        const newRate = getRateForType(opt.val);
-                        setForm(f => ({ ...f, month_occupancy: opt.val, amount: newRate || f.amount }));
-                      }}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition flex flex-col items-center gap-0.5 ${
-                        form.month_occupancy === opt.val
-                          ? opt.val === 0 ? 'bg-blue-600 text-white'
-                          : opt.val === 1 ? 'bg-yellow-500 text-white'
-                          : 'bg-gray-500 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}>
-                      <span>{opt.icon}</span>
-                      <span className="text-xs">{opt.label}</span>
-                    </button>
-                  ))}
+
+              {/* Shop info badge */}
+              {selectedFlat?.is_shop ? (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-700 font-medium">
+                  🏪 Shop — Fixed rate ₹{yearRate?.shop_rate ?? 150}/month
                 </div>
-                {form.month_occupancy !== (selectedFlat?.is_rented ?? 0) && (
-                  <p className="text-xs text-orange-600 mt-1">
-                    ⚠️ Flat default ({OCC_ICONS[selectedFlat?.is_rented ?? 0]}) पेक्षा वेगळा — फक्त या महिन्यासाठी
-                  </p>
-                )}
-              </div>
+              ) : (
+                /* Month Occupancy Type - flats only */
+                <div>
+                  <label className="label">महिन्याचा प्रकार (Month Type)</label>
+                  <div className="flex gap-2">
+                    {[
+                      { val: 0, icon: '🏠', label: 'Owner' },
+                      { val: 1, icon: '🔑', label: 'Tenant' },
+                      { val: 2, icon: '🚪', label: 'Empty' },
+                    ].map(opt => (
+                      <button key={opt.val}
+                        onClick={() => {
+                          const newRate = getRateForType(opt.val);
+                          setForm(f => ({ ...f, month_occupancy: opt.val, amount: newRate || f.amount }));
+                        }}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition flex flex-col items-center gap-0.5 ${
+                          form.month_occupancy === opt.val
+                            ? opt.val === 0 ? 'bg-blue-600 text-white'
+                            : opt.val === 1 ? 'bg-yellow-500 text-white'
+                            : 'bg-gray-500 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}>
+                        <span>{opt.icon}</span>
+                        <span className="text-xs">{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {form.month_occupancy !== (selectedFlat?.is_rented ?? 0) && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      ⚠️ Flat default ({OCC_ICONS[selectedFlat?.is_rented ?? 0]}) पेक्षा वेगळा — फक्त या महिन्यासाठी
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="label">{t('status')}</label>
                 <div className="flex gap-2">
@@ -294,14 +364,25 @@ export default function Maintenance() {
                   ))}
                 </div>
               </div>
-              <div><label className="label">{t('amount')} {form.month_occupancy === 2 ? '(Empty = ₹0 असू शकतो)' : ''}</label>
-                <input className="input" type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} />
+
+              <div>
+                <label className="label">
+                  {t('amount')} {!selectedFlat?.is_shop && form.month_occupancy === 2 ? '(Empty = ₹0 असू शकतो)' : ''}
+                </label>
+                <input className="input" type="number" value={form.amount}
+                  onChange={e => setForm({...form, amount: e.target.value})} />
               </div>
-              <div><label className="label">{t('date')}</label>
-                <input className="input" type="date" value={form.payment_date} onChange={e => setForm({...form, payment_date: e.target.value})} />
+
+              <div>
+                <label className="label">{t('date')}</label>
+                <input className="input" type="date" value={form.payment_date}
+                  onChange={e => setForm({...form, payment_date: e.target.value})} />
               </div>
-              <div><label className="label">{t('payment_mode')}</label>
-                <select className="input" value={form.payment_mode} onChange={e => setForm({...form, payment_mode: e.target.value})}>
+
+              <div>
+                <label className="label">{t('payment_mode')}</label>
+                <select className="input" value={form.payment_mode}
+                  onChange={e => setForm({...form, payment_mode: e.target.value})}>
                   {['Cash','Online','Cheque','NEFT','UPI'].map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
